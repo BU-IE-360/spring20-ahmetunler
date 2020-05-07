@@ -1,0 +1,102 @@
+---
+title: "HOMEWORK 2"
+author: "Ahmet Ünler"
+date: "07 05 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+In this homework, we were asked to gather the data of electicity consumption of Turkey from 1 January 2016 to 26 April 2020. After gathering the data, we were asked to analyze if there happens any seasonality in the data.
+```{r}
+#install.packages("readxl")
+#install.packages("data.table")
+#install.packages("forecast")
+#install.packages("xts")
+require(readxl)
+require(xts)
+require(data.table)
+require(forecast)
+setwd("~/Desktop")
+my_data <- fread("hw2date.csv")
+str(my_data)
+my_data[, date_info := paste(my_data$V1, my_data$V2)]
+setnames(my_data, "V3", "Consumption")
+usable_data <- my_data[, list(date_info, Consumption)]
+is.data.table(usable_data)
+usable_data[, real_date_info:= as.POSIXct(date_info, format = "%d.%m.%Y %H:%M")]
+last_usable_data <- usable_data[,list(real_date_info, Consumption)]
+a <- as.xts(last_usable_data)
+hourly_data_xts <- to.hourly(a,OHLC = FALSE)
+daily_data_xts <- to.daily(a,OHLC = FALSE)
+weekly_data_xts <- to.weekly(a ,OHLC = FALSE)
+monthly_data_xts <- to.monthly(a ,OHLC = FALSE)
+quarterly_data_xts <- to.quarterly(a,OHLC = FALSE)
+attr(weekly_data_xts, 'frequency') <- 7
+attr(daily_data_xts, 'frequency') <- 365
+attr(hourly_data_xts, 'frequency') <- 8766
+```
+At this first part of my code, I read the essential data from my desktop. But before doing that, I partioned the data into 3 different columns. The first one was showing the day of the data, the second was the time and the third one was the amount of consumption. After that part, I checked the structure of my data and noticed that the time and day entries were read as characters. I first merged these two columns, then converted their type into time. After that I made a new data.list with sublisting just the time type objects and their corresponding consumption amounts. After that, with the help of xts package I converted the last_usable_data into an xts object. And finally, I created 6 data with different frequencies to deseasonilize them one by one.
+```{r}
+quarterly_data <- as.ts(quarterly_data_xts)
+monthly_data <- as.ts(monthly_data_xts)
+weekly_data <- as.ts(weekly_data_xts)
+daily_data <- as.ts(daily_data_xts)
+hourly_data <- as.ts(hourly_data_xts)
+plot(quarterly_data)
+plot(monthly_data)
+plot(weekly_data)
+plot(daily_data)
+plot(hourly_data)
+dec_quart<-decompose(quarterly_data, type = "additive")
+dec_mont<-decompose(monthly_data, type = "additive")
+dec_week<-decompose(weekly_data, type = "additive")
+dec_daily<-decompose(daily_data, type = "additive")
+dec_hour<-decompose(hourly_data, type = "additive")
+plot(dec_quart)
+plot(dec_mont)
+plot(dec_week)
+plot(dec_daily)
+plot(dec_hour)
+```
+At this part, I have converted the xts type data into ts type data to examine the data more clearly and decompose them. After I decomposed the data, I've plotted the decomposed versions.
+```{r}
+deseasonilized <- weekly_data - dec_week$seasonal
+de_trend_seas <- deseasonilized - dec_week$trend
+acf(de_trend_seas, na.action = na.pass)
+#install.packages("forecast")
+require(forecast)
+ma_model_1 <- arima(de_trend_seas, order = c(0,0,1))
+print(ma_model_1)
+ma_model_2 <- arima(de_trend_seas, order = c(0,0,2))
+print(ma_model_2)
+ma_model_3 <- arima(de_trend_seas, order = c(0,0,3))
+print(ma_model_3)
+ma_model_4 <- arima(de_trend_seas, order = c(0,0,4))
+print(ma_model_4)
+```
+At this part, I first detrended and deseasonalized the weekly data and tried 4 ma models. The best one turned out to be the ma_model_3 with the lowest AIC value.
+```{r}
+ar_model_1 <- arima(de_trend_seas, order = c(1,0,0))
+print(ar_model_1)
+ar_model_2 <- arima(de_trend_seas, order = c(2,0,0))
+print(ar_model_2)
+ar_model_3 <- arima(de_trend_seas, order = c(3,0,0))
+print(ar_model_3)
+ar_model_4 <- arima(de_trend_seas, order = c(4,0,0))
+print(ar_model_4)
+```
+At this part, I tried 4 ar models. The best one turned out to be the ar_model_3 with the lowest AIC value.
+```{r}
+AIC(ar_model_3)
+BIC(ar_model_3)
+AIC(ma_model_3)
+BIC(ma_model_3)
+```
+It turns out that ma_model_3 is better than the ar_model_3. Now it is time to make forecasts with this model.
+```{r}
+model_forecast <- predict(ma_model_3, n.ahead = 1)$pred
+model_forecast_se <- predict(ma_model_3, n.ahead = 1)$se
+```
+the srcipt of my second homework can be reached here : https://github.com/BU-IE-360/spring20-ahmetunler/blob/master/Files/IE%20360%20HOMEWORK%202%20SCRIPT.R
